@@ -55,6 +55,11 @@ public class Proxy {
         }
         );
         thread.start();
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            System.out.println("Não foi possível esperar a thread de ouvir porta.");
+        }
         return thread;
     }
 }

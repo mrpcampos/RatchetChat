@@ -63,6 +63,7 @@ public class ClienteMain {
         int portaDestinatario = verificarNull(InterfaceGrafica::definirPortaDoDestinatario, 8088);
         try {
             ChatComCatraca chat = new ChatComCatraca(pessoa, proxy.conectarparaConversa(ipDestinatario, portaDestinatario), ChatComCatraca.A);
+            chat.comunicador.join();
         } catch (IOException e) {
             InterfaceGrafica.showDialog("Erro na execução do chat.", "Erro", JOptionPane.ERROR_MESSAGE);
             e.printStackTrace();

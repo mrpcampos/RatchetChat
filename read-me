@@ -1,5 +1,7 @@
 -> O código de java swing para a interface gráfica da sala de bate papo foi "emprestado"
    do seguinte post https://codereview.stackexchange.com/questions/25461/simple-chat-room-swing-gui
+-> Para aprender a utilizar os sockets foi utilizado esse link https://www.caelum.com.br/apostila-java-orientacao-objetos/apendice-sockets/#desafio-broadcast-das-mensagens
+   esse trabalho usou como base o ultimo exemplo do link, apesar de ja não dar mais para perceber
 -> Todas as demais telas foram geradas com JOptionPanes.
 -> A classe CriptoUtils do módulo servidor veio do trabalho de referência postado pela professora, ele foi alterado para
    permitir o uso de uma senha por conteúdo salvo, ao invés de uma 'mastersenha' para tudo. As senhas utilizadas são
@@ -8,7 +10,12 @@
 -> A chave mestra que utilizei no CriptoUtils é aaa, ela ainda é necessária para ligar o servidor
 
 ::TODO List::
-Arrumar os caminhos do DH, reduzir partes repetidas
+Arrumar os caminhos do DH, reduzir partes repetidas - FEITO
+Arumar a classe CriptoUtils, não da pra entender nada e as vezes ela simplemente não funciona
+Arumar a classe CriptoUtils, não da pra entender nada e as vezes ela simplemente não funciona
+Arumar a classe CriptoUtils, não da pra entender nada e as vezes ela simplemente não funciona
+Arumar a classe CriptoUtils, não da pra entender nada e as vezes ela simplemente não funciona
+Arumar a classe CriptoUtils, não da pra entender nada e as vezes ela simplemente não funciona
+Arumar a classe CriptoUtils, não da pra entender nada e as vezes ela simplemente não funciona
 Tornar mais fácil (possível) de ver o estado das variáveis
 Centralizar as conexões diretos no servidor, e de la permitir escolher conectar com outra pessoa que tambem esteja lá (Invés de dizer o ip e porta do outro Cliente)
-Arumar a classe CriptoUtils, não da pra entender nada e ela as vezes simplemente não funciona

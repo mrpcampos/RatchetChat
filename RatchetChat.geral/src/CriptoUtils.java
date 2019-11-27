@@ -222,47 +222,39 @@ public class CriptoUtils {
         return null;
     }
 
-    public static String DecifrarMensagem(String mensagem, Key key) {
-        try {
-            // Inicializar a montoeira de coisas que precisa
-            //Key secretKey = new SecretKeySpec(key.getEncoded(), "AES");
-            byte[] messageBytes = Hex.decodeHex(mensagem.toCharArray());
-            int ctLength = messageBytes.length - 16;
-            byte[] iv = new byte[16];
-            byte[] cipherText = new byte[ctLength];
-            IvParameterSpec ivSpec;
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding", "BCFIPS");
-            Mac hMac = Mac.getInstance("HMacSHA256", "BCFIPS");
-            Key hMacKey = new SecretKeySpec(key.getEncoded(), "HMacSHA256");
+    public static String DecifrarMensagem(String mensagem, Key key) throws Exception {
+        // Inicializar a montoeira de coisas que precisa
+        //Key secretKey = new SecretKeySpec(key.getEncoded(), "AES");
+        byte[] messageBytes = Hex.decodeHex(mensagem.toCharArray());
+        int ctLength = messageBytes.length - 16;
+        byte[] iv = new byte[16];
+        byte[] cipherText = new byte[ctLength];
+        IvParameterSpec ivSpec;
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding", "BCFIPS");
+        Mac hMac = Mac.getInstance("HMacSHA256", "BCFIPS");
+        Key hMacKey = new SecretKeySpec(key.getEncoded(), "HMacSHA256");
 
-            System.arraycopy(messageBytes, 0, iv, 0, 16);
-            System.arraycopy(messageBytes, 16, cipherText, 0, ctLength);
+        System.arraycopy(messageBytes, 0, iv, 0, 16);
+        System.arraycopy(messageBytes, 16, cipherText, 0, ctLength);
 
-            ivSpec = new IvParameterSpec(iv);
-            // System.out.println("IV Decifrando: " + Hex.encodeHexString(iv));
+        ivSpec = new IvParameterSpec(iv);
+        // System.out.println("IV Decifrando: " + Hex.encodeHexString(iv));
 
-            // Decifrar
-            cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
+        // Decifrar
+        cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
 
-            byte[] plainText = cipher.doFinal(cipherText, 0, ctLength);
-            int messageLength = plainText.length - hMac.getMacLength();
+        byte[] plainText = cipher.doFinal(cipherText, 0, ctLength);
+        int messageLength = plainText.length - hMac.getMacLength();
 
-            hMac.init(hMacKey);
-            hMac.update(plainText, 0, messageLength);
+        hMac.init(hMacKey);
+        hMac.update(plainText, 0, messageLength);
 
-            byte[] messageMac = new byte[hMac.getMacLength()];
-            System.arraycopy(plainText, messageLength, messageMac, 0, messageMac.length);
+        byte[] messageMac = new byte[hMac.getMacLength()];
+        System.arraycopy(plainText, messageLength, messageMac, 0, messageMac.length);
 
-            String decifrado = toString(plainText, messageLength);
+        String decifrado = toString(plainText, messageLength);
 
-            return decifrado;
-
-        } catch (Exception e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-
-        return null;
+        return decifrado;
     }
 
     public static String SignString(PrivateKey key, byte[] data) throws Exception {

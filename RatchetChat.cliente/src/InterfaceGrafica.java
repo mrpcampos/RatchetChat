@@ -1,10 +1,6 @@
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
+import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 import javax.swing.*;
 
@@ -18,10 +14,21 @@ public class InterfaceGrafica {
 
     String username;
 
-    InterfaceGrafica() {
+    InterfaceGrafica(String identificador) {
+        username = identificador;
     }
 
     static String menu(String[] opcoes) {
+//        JComboBox<String> combo = new JComboBox<>(opcoes);
+//        JOptionPane pane = new JOptionPane(combo, JOptionPane.QUESTION_MESSAGE);
+//        // Configure via set methods
+//        JDialog dialog = pane.createDialog(null, "Menu");
+//        // the line below is added to the example from the docs
+////        dialog.setModal(false); // this says not to block background components
+//        dialog.setModalityType(Dialog.ModalityType.MODELESS);
+//
+//        dialog.setVisible(true);
+//        return (String) pane.getValue();
         return (String) JOptionPane.showInputDialog(null, "O que deseja fazer?", appName, JOptionPane.QUESTION_MESSAGE, null, opcoes, "0");
     }
 
@@ -59,16 +66,15 @@ public class InterfaceGrafica {
     }
 
     /**
-     *
-     * @param msg explicação do erro para aparecer na dialog box
+     * @param msg         explicação do erro para aparecer na dialog box
      * @param messageType the type of message to be displayed:
-     * <code>ERROR_MESSAGE</code>,
-     * <code>INFORMATION_MESSAGE</code>,
-     * <code>WARNING_MESSAGE</code>,
-     * <code>QUESTION_MESSAGE</code>,
-     * or <code>PLAIN_MESSAGE</code>
+     *                    <code>ERROR_MESSAGE</code>,
+     *                    <code>INFORMATION_MESSAGE</code>,
+     *                    <code>WARNING_MESSAGE</code>,
+     *                    <code>QUESTION_MESSAGE</code>,
+     *                    or <code>PLAIN_MESSAGE</code>
      */
-    public static void showDialog(String msg, String title, int messageType){
+    public static void showDialog(String msg, String title, int messageType) {
         JOptionPane.showMessageDialog(null, msg, title, messageType);
     }
 
@@ -81,12 +87,10 @@ public class InterfaceGrafica {
         southPanel.setLayout(new GridBagLayout());
 
         messageBox = new JTextField(30);
-        messageBox.addActionListener(this::enviarMensagem);
         messageBox.requestFocusInWindow();
 
         sendMessage = new JButton("Send Message");
         sendMessage.setEnabled(false);
-        sendMessage.addActionListener(this::enviarMensagem);
 
         chatBox = new JTextArea();
         chatBox.setEditable(false);
@@ -119,8 +123,21 @@ public class InterfaceGrafica {
         newFrame.setVisible(true);
     }
 
+    public void addListeners(ActionListener ac) {
+        messageBox.addActionListener(ac);
+        sendMessage.addActionListener(ac);
+    }
+
     public void permitirEnvioMensagens(boolean bool) {
+        messageBox.setEnabled(bool);
         sendMessage.setEnabled(bool);
+    }
+
+    public void receberMensagem(String pct) {
+        int divider = pct.lastIndexOf(":");
+        String msg = pct.substring(0, divider);
+        String username = pct.substring(pct.lastIndexOf(":") + 1);
+        this.adicionarMensagem(msg, username);
     }
 
     public void adicionarMensagem(String msg, String remetente) {
@@ -128,17 +145,28 @@ public class InterfaceGrafica {
                 + "\n");
     }
 
-    public void enviarMensagem(ActionEvent event) {
-//        if (messageBox.getText().trim().length() > 1) {
-//            if (messageBox.getText().equals(".clear")) {
-//                chatBox.setText("Cleared all messages\n");
-//                messageBox.setText("");
-//            } else {
-//                proxy.enviarMensagem(messageBox.getText(), username);
-//                messageBox.setText("");
-//            }
-//        }
-//        messageBox.requestFocusInWindow();
+    public String popMensagemParaEnviar() {
+        String pct = messageBox.getText() + ":" + username;
+        limparCaixaDeEnvio();
+        return pct;
     }
 
+    public String getTextoCaixaEnvio() {
+        return messageBox.getText();
+    }
+
+    public void limparChat() {
+        chatBox.setText("Cleared all messages\n");
+        messageBox.requestFocusInWindow();
+        limparCaixaDeEnvio();
+    }
+
+    public void limparCaixaDeEnvio() {
+        messageBox.setText("");
+    }
+
+    public String getUsername() {
+        return username;
+    }
 }
+
