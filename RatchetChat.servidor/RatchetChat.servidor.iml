@@ -7,5 +7,7 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="RatchetChat.geral" />
+    <orderEntry type="library" name="Bouncy-Castle" level="project" />
   </component>
 </module>

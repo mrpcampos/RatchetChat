@@ -1,0 +1,8 @@
+-> O código de java swing para a interface gráfica da sala de bate papo foi "emprestado"
+   do seguinte post https://codereview.stackexchange.com/questions/25461/simple-chat-room-swing-gui
+-> Todas as demais telas foram geradas com JOptionPanes.
+-> A classe CriptoUtils do módulo servidor veio do trabalho de referência postado pela professora, ele foi alterado para
+   permitir o uso de uma senha por conteúdo salvo, ao invés de uma 'mastersenha' para tudo. As senhas utilizadas são
+   geradas com pbkdf2 utilizando como salt o login e o segredo(senha escrita pelo usuário).
+-> Para conversarem entre um cliente precisa saber o ip do outro, a porta normalmente utilizada é 8088
+-> A chave mestra que utilizei no CriptoUtils é aaa, ela ainda é necessária para ligar o servidor

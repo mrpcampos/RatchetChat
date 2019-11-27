@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="Bouncy-Castle">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/imports/bc-fips-1.0.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/imports/bcpkix-fips-1.0.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/imports/commons-codec-1.10.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
