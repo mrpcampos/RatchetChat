@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/RatchetChat.iml" filepath="$PROJECT_DIR$/RatchetChat.iml" />
+      <module fileurl="file://$PROJECT_DIR$/RatchetChat.cliente/RatchetChat.cliente.iml" filepath="$PROJECT_DIR$/RatchetChat.cliente/RatchetChat.cliente.iml" />
+      <module fileurl="file://$PROJECT_DIR$/RatchetChat.geral/RatchetChat.geral.iml" filepath="$PROJECT_DIR$/RatchetChat.geral/RatchetChat.geral.iml" />
+      <module fileurl="file://$PROJECT_DIR$/RatchetChat.servidor/RatchetChat.servidor.iml" filepath="$PROJECT_DIR$/RatchetChat.servidor/RatchetChat.servidor.iml" />
+    </modules>
+  </component>
+</project>
