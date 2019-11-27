@@ -116,8 +116,9 @@ public class ClienteMain {
         this.pessoa.setIpServidor(verificarNull(InterfaceGrafica::definirIpServidor, pessoa.getIpServidor()));
     }
 
-    <R> R verificarNull(Function<R, R> c, R parameter) {
-        R value = c.apply(parameter);
+    //Quando você brinca com lambdas e generics
+    <R, T> T verificarNull(Function<R, T> c, R parameter) {
+        T value = c.apply(parameter);
         if (value == null) {
             System.exit(0);
             return null; //Compilador sendo chato
@@ -134,9 +135,10 @@ public class ClienteMain {
         try {
             Resposta res = proxy.fazerRequisicao(pessoa.getIpServidor(), pessoa.getPortaServidor(), new RequisicaoDeChavesECertificado(loginSenha[0], loginSenha[1]));
             RespostaDeChavesECertificado resCEC = (RespostaDeChavesECertificado) res;
-            if (resCEC.resposta.equals(Mensagens.ACEITO))
+            if (resCEC.resposta.equals(Mensagens.ACEITO)) {
                 pessoa.inicializar(loginSenha[0], resCEC.getCertificate(), resCEC.getPrivateKey());
-            else {
+                pessoa.setIdentificador(resCEC.getCertificate().getIssuerX500Principal().getName().split("=")[1]);
+            } else {
                 System.out.println("Pedido recusado");
                 System.out.println("resposta: " + resCEC.resposta);
                 System.out.println("Chave publica: " + resCEC.getCertificate().getPublicKey());

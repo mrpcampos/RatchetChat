@@ -37,7 +37,7 @@ public class Servidor {
                     Requisicao req = (Requisicao) ois.readObject();
                     ObjectOutputStream oos = new ObjectOutputStream(cliente.getOutputStream());
 
-                    if (req.getTipo().equals(Mensagens.RESGATAR_CERTIFICADO_E_CHAVES)) {
+                    if (req.getTipo().equals(Mensagens.PEGAR_CERTIFICADO_E_CHAVES)) {
                         //Gera chaves e certificado, guarda essas informações e prepara a resposta
                         RespostaDeChavesECertificado resCEC = this.pegarChavesECertificado((RequisicaoDeChavesECertificado) req);
 
@@ -71,7 +71,7 @@ public class Servidor {
                 X509Certificate certificado = CriptoUtils.GetCert(identificador);
                 if (certificado != null) {
                     certificado.checkValidity();
-                    return new RespostaConsultaCertificado();
+                    return new RespostaConsultaCertificado(certificado);
                 }
             }
         } catch (CertificateException | KeyStoreException e) {

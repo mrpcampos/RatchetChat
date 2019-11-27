@@ -6,3 +6,9 @@
    geradas com pbkdf2 utilizando como salt o login e o segredo(senha escrita pelo usuário).
 -> Para conversarem entre um cliente precisa saber o ip do outro, a porta normalmente utilizada é 8088
 -> A chave mestra que utilizei no CriptoUtils é aaa, ela ainda é necessária para ligar o servidor
+
+::TODO List::
+Arrumar os caminhos do DH, reduzir partes repetidas
+Tornar mais fácil (possível) de ver o estado das variáveis
+Centralizar as conexões diretos no servidor, e de la permitir escolher conectar com outra pessoa que tambem esteja lá (Invés de dizer o ip e porta do outro Cliente)
+Arumar a classe CriptoUtils, não da pra entender nada e ela as vezes simplemente não funciona

@@ -15,9 +15,10 @@ public class ChatComCatraca {
     private ObjectInputStream receber;
     private ObjectOutputStream enviar;
 
-    private String identificadorOutraPessoa;
-    private X509Certificate certificadoOutraPessoa;
+    private String identOutro;
+    private X509Certificate certOutro;
 
+    private Catraca catraca;
 
     private InterfaceGrafica ig;
     private Proxy proxy;
@@ -35,17 +36,16 @@ public class ChatComCatraca {
         this.eu = eu;
 
         CriptoUtils.SetProvider();
+        this.catraca = new Catraca(CriptoUtils.generateDHNumberPair());
 
         enviar = new ObjectOutputStream(outraPessoa.getOutputStream());
         receber = new ObjectInputStream(outraPessoa.getInputStream());
 
-        KeyPair chavesDH = CriptoUtils.generateDHNumberPair();
-
         try {
             if (this.AouB.equals(A)) {
-                caminhoA(chavesDH);
+                caminhoA();
             } else if (this.AouB.equals(B)) {
-                caminhoB(chavesDH);
+                caminhoB();
             } else {
                 throw new IllegalArgumentException("O valor de AouB deve ser A ou B.");
             }
@@ -54,85 +54,67 @@ public class ChatComCatraca {
             throw e;
         }
     }
-
-    private void caminhoA(KeyPair meuParDeChavesDH) throws Exception {
+    private void caminhoA() throws Exception {
         //A -> B: g^a, A
-        PublicKey ga = meuParDeChavesDH.getPublic();
-        enviar.writeObject(ga);                     //g^a
+        enviar.writeObject(catraca.getMyPubKeyDH());  //g^a
         enviar.writeObject(eu.getIdentificador());  //A
 
         //B -> A: g^b, CERTb, Eg^ab{ SIGb{g^a, g^b, A}}
-        PublicKey chavePublicaOutraPessoa = (PublicKey) receber.readObject();     //g^b
-        Key gab = chaveCompartilhada(chavePublicaOutraPessoa, meuParDeChavesDH.getPrivate());          //g^ab
+        catraca.setPubKeyOutro((PublicKey) receber.readObject());                            //g^b
+        certOutro = (X509Certificate) receber.readObject();                                  //CERTb
+        catraca.setSessioanKey(defSessionKey(catraca.getPubKeyOutro(), catraca.getMyPrivKeyDH()));//g^ab
+        identOutro = certOutro.getIssuerX500Principal().getName().split("=")[1];
+        verificarAutenticidade((String) receber.readObject(), catraca.getMyPubKeyDH(), catraca.getPubKeyOutro());
 
-        certificadoOutraPessoa = (X509Certificate) receber.readObject();//Suposto CERTb
-        String textoCifrado = (String) receber.readObject();            //Eg^ab{ SIGb{g^a, g^b, A}}
-        String textoDecifrado = CriptoUtils.DecifrarMensagem(textoCifrado, gab);
-        identificadorOutraPessoa = certificadoOutraPessoa.getIssuerX500Principal().getName().split("=")[1];
-        byte[] dadosQueDevemEstarAssinados =
-                concatByteArrays(
-                        meuParDeChavesDH.getPublic().getEncoded(),
-                        chavePublicaOutraPessoa.getEncoded(),
-                        eu.getIdentificador().getBytes());
-        if (!verificarCertificadoEAssinatura(textoDecifrado, dadosQueDevemEstarAssinados)) {
-            throw new SecurityException("Certificado RSA inválido, possível ataque!");
-        }
         // A -> B: CERTa, Eg^ab {SIGa{g^a, g^b, B}}
-        X509Certificate certificadoA = eu.getCertificate(); //CERTa
-        byte[] infoParaAssinar =
-                concatByteArrays(meuParDeChavesDH.getPublic().getEncoded(),
-                        chavePublicaOutraPessoa.getEncoded(),
-                        identificadorOutraPessoa.getBytes());
-        String msgAssinada = CriptoUtils.SignString(eu.getPrivateKey(), infoParaAssinar);
-        String mensagemCriptografada = CriptoUtils.CifrarMensagem(msgAssinada, gab);
-        enviar.writeObject(certificadoA);                                           //CERTa
-        enviar.writeObject(mensagemCriptografada);                                  //Ek {SIGa{g^a, g^b, B}
-        InterfaceGrafica.showDialog("Deu tudo certo no caminho B!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+        enviar.writeObject(eu.getCertificate()); //CERTa
+        enviar.writeObject(comprovarAutenticidade(catraca.getMyPubKeyDH(), catraca.getPubKeyOutro()));
+        InterfaceGrafica.showDialog("Deu tudo certo no caminho A!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private void caminhoB(KeyPair meuParDeChavesDH) throws Exception {
+    private void caminhoB() throws Exception {
         //A -> B: g^a, A
-        PublicKey chavePublicaOutraPessoa = (PublicKey) receber.readObject();
-        this.identificadorOutraPessoa = (String) receber.readObject();
-        Key gab = chaveCompartilhada(chavePublicaOutraPessoa, meuParDeChavesDH.getPrivate());
+        catraca.setPubKeyOutro((PublicKey) receber.readObject());   //g^a
+        this.identOutro = (String) receber.readObject();            //A
+        catraca.setSessioanKey(defSessionKey(catraca.getPubKeyOutro(), catraca.getMyPrivKeyDH()));//g^ab
 
         //B -> A: g^b, CERTb, Eg^ab{ SIGb{g^a, g^b, A}}
-        PublicKey gb = meuParDeChavesDH.getPublic();     //g^b
-        X509Certificate certificadoB = eu.getCertificate(); //CERTb
-        byte[] infoParaAssinar =
-                concatByteArrays(chavePublicaOutraPessoa.getEncoded(),
-                        meuParDeChavesDH.getPublic().getEncoded(),
-                        identificadorOutraPessoa.getBytes());
-        String msgAssinada = CriptoUtils.SignString(eu.getPrivateKey(), infoParaAssinar);
-        String mensagemCriptografada = CriptoUtils.CifrarMensagem(msgAssinada, gab);//Ek {SIGb{g^a, g^b, A}
-        enviar.writeObject(gb);                     //g^b
-        enviar.writeObject(certificadoB);           //CERTb
-        enviar.writeObject(mensagemCriptografada);  //Ek {SIGb{g^a, g^b, A}
+        enviar.writeObject(catraca.getMyPubKeyDH());    //g^b
+        enviar.writeObject(eu.getCertificate());        //CERTb
+        enviar.writeObject(comprovarAutenticidade(catraca.getPubKeyOutro(), catraca.getMyPubKeyDH()));
+
 
         //A -> B: CERTa, Eg^ab {SIGa{g^a, g^b, B}}
-        certificadoOutraPessoa = (X509Certificate) receber.readObject();//Suposto CERTa
-        String textoCifrado = (String) receber.readObject();            //Eg^ab{ SIGa{g^a, g^b, B}}
-        String textoDecifrado = CriptoUtils.DecifrarMensagem(textoCifrado, gab);
-        identificadorOutraPessoa = certificadoOutraPessoa.getIssuerX500Principal().getName().split("=")[1];
-        byte[] dadosQueDevemEstarAssinados =
-                concatByteArrays(
-                        chavePublicaOutraPessoa.getEncoded(),
-                        meuParDeChavesDH.getPublic().getEncoded(),
-                        eu.getIdentificador().getBytes());
-        if (!verificarCertificadoEAssinatura(textoDecifrado, dadosQueDevemEstarAssinados)) {
-            throw new SecurityException("Certificado RSA inválido, possível ataque!");
-        }
-        InterfaceGrafica.showDialog("Deu tudo certo no caminho A!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+        certOutro = (X509Certificate) receber.readObject();             //CERTa
+        verificarAutenticidade((String) receber.readObject(),
+                catraca.getPubKeyOutro(),
+                catraca.getMyPubKeyDH());//Eg^ab{ SIGa{g^a, g^b, B}}
+
+        InterfaceGrafica.showDialog("Deu tudo certo no caminho B!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
 
     }
 
-    private boolean verificarCertificadoEAssinatura(String supostoTextoAssinado, byte[] dadosSupostamenteNaAssinatura) throws Exception {
-        Requisicao req = new RequisicaoConsultaCertificado(identificadorOutraPessoa);
-        RespostaConsultaCertificado res;
-        res = (RespostaConsultaCertificado) this.proxy.fazerRequisicao(eu.getIpServidor(), eu.getPortaServidor(), req);
-        if (res.resposta.equals(Mensagens.NEGADO))
-            throw new InvalidKeyException("Certificado negado, identificador não encontrado");
-        return CriptoUtils.CheckSign(res.getCertificado().getPublicKey(), supostoTextoAssinado, dadosSupostamenteNaAssinatura);
+    //Ler Eg^ab{ SIGb{g^a, g^b, A}}
+    private void verificarAutenticidade(String textoCriptografado, PublicKey pubKeyA, PublicKey pubKeyB) throws Exception {
+        //Verifica se o certificado existe no servidor
+        RespostaConsultaCertificado res = (RespostaConsultaCertificado) proxy.fazerRequisicao(eu.getIpServidor(), eu.getPortaServidor(), new RequisicaoConsultaCertificado(identOutro));
+        if (res.resposta.equals(Mensagens.NEGADO) || !res.getCertificado().equals(certOutro)){
+            System.out.println("RespostaConsulta: " + res.resposta);
+            System.out.println("Certificado " + res.getCertificado().getPublicKey() +" " + res.getCertificado().getIssuerX500Principal().getName() + "");
+            throw new SecurityException("Certificado forjado");
+        }
+
+        //Verifica se o certificado realmente assinou os valores
+        byte[] concatBytes = concatByteArrays(pubKeyA.getEncoded(), pubKeyB.getEncoded(), eu.getIdentificador().getBytes());
+        if (!CriptoUtils.CheckSign(certOutro.getPublicKey(), CriptoUtils.DecifrarMensagem(textoCriptografado, catraca.getSessionKey()), concatBytes)) {
+            throw new SecurityException("Certificado RSA inválido, possível ataque!");
+        }
+    }
+
+    //Gerar Eg^ab {SIGa{g^a, g^b, B}}
+    private String comprovarAutenticidade(PublicKey pubKeyA, PublicKey pubKeyB) throws Exception {
+        return CriptoUtils.CifrarMensagem(CriptoUtils.SignString(eu.getPrivateKey(),
+                concatByteArrays(pubKeyA.getEncoded(), pubKeyB.getEncoded(), identOutro.getBytes())), catraca.getSessionKey());
     }
 
     private byte[] concatByteArrays(byte[] ba1, byte[] ba2, byte[] ba3) throws IOException {
@@ -143,11 +125,11 @@ public class ChatComCatraca {
         return outputStream.toByteArray();
     }
 
-    private Key chaveCompartilhada(PublicKey chavePublicaOutraPessoa, PrivateKey minhaChavePrivada) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidKeyException {
+    private Key defSessionKey(PublicKey keyPubDHOutro, PrivateKey myPrivKeyDH) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidKeyException {
         KeyAgreement keyAgree = KeyAgreement.getInstance("DH", "BCFIPS");
 
-        keyAgree.init(minhaChavePrivada);
-        keyAgree.doPhase(chavePublicaOutraPessoa, true);
+        keyAgree.init(myPrivKeyDH);
+        keyAgree.doPhase(keyPubDHOutro, true);
         MessageDigest hash = MessageDigest.getInstance("SHA256", "BCFIPS");
         return new SecretKeySpec(hash.digest(keyAgree.generateSecret()), "AES");
     }

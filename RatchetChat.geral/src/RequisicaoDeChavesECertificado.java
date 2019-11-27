@@ -3,7 +3,7 @@ public class RequisicaoDeChavesECertificado extends Requisicao {
     private String senha;
 
     public RequisicaoDeChavesECertificado(String identificador, String senha) {
-        super(Mensagens.RESGATAR_CERTIFICADO_E_CHAVES);
+        super(Mensagens.PEGAR_CERTIFICADO_E_CHAVES);
         this.identificador = identificador;
         this.senha = senha;
     }

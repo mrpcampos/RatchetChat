@@ -1,47 +1,27 @@
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
-import java.security.GeneralSecurityException;
-import java.security.Key;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.KeyStore;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.SecureRandom;
-import java.security.Security;
-import java.security.Signature;
-import java.security.cert.CertificateFactory;
+import java.security.*;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Scanner;
 
-import javax.crypto.Cipher;
-import javax.crypto.Mac;
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
+import javax.crypto.*;
 import javax.crypto.spec.DHParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
-import javax.security.auth.x500.X500Principal;
 
+import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x509.BasicConstraints;
-import org.bouncycastle.asn1.x509.Extension;
-import org.bouncycastle.cert.CertIOException;
 import org.bouncycastle.cert.X509v1CertificateBuilder;
-import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.jcajce.JcaX509v1CertificateBuilder;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
@@ -77,13 +57,13 @@ public class CriptoUtils {
 
     public static void Setup() {
         try {
-            Security.addProvider(new BouncyCastleFipsProvider());
+            SetProvider();
 
             INPUT = new Scanner(System.in);
             System.out.println("Digite a senha mestra: ");
 
-            String masterPassString = INPUT.nextLine();
-//			String masterPassString = "senha";
+//            String masterPassString = INPUT.nextLine();
+            String masterPassString = "senha";
             masterPassString = Hex.encodeHexString(generateDerivedKey(masterPassString, masterPassString, 10).getEncoded());
 
             masterPass = masterPassString.toCharArray();
@@ -202,36 +182,6 @@ public class CriptoUtils {
         return new JcaX509CertificateConverter().setProvider("BCFIPS").getCertificate(v1CertBldr.build(signerBuilder.build(caSignerKey)));
     }
 
-    public static X509Certificate makeV3Certificate(X509Certificate caCertificate, PrivateKey caPrivateKey, PublicKey eePublicKey)
-            throws GeneralSecurityException, CertIOException, OperatorCreationException {
-        X509v3CertificateBuilder v3CertBldr = new JcaX509v3CertificateBuilder(
-                caCertificate.getSubjectX500Principal(),
-                BigInteger.valueOf(System.currentTimeMillis()).multiply(BigInteger.valueOf(10)),
-                new Date(System.currentTimeMillis() - 1000L * 5),
-                new Date(System.currentTimeMillis() + CriptoUtils.THIRTY_DAYS),
-                new X500Principal("CN=Cert V3 Example"), eePublicKey);
-
-        JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
-
-        v3CertBldr.addExtension(
-                Extension.subjectKeyIdentifier,
-                false,
-                extUtils.createSubjectKeyIdentifier(eePublicKey));
-
-        v3CertBldr.addExtension(
-                Extension.authorityKeyIdentifier,
-                false,
-                extUtils.createAuthorityKeyIdentifier(caCertificate.getPublicKey()));
-
-        v3CertBldr.addExtension(
-                Extension.basicConstraints,
-                true,
-                new BasicConstraints(false));
-
-        final JcaContentSignerBuilder signerBuilder = new JcaContentSignerBuilder("SHA256WithRSAEncryption").setProvider("BCFIPS");
-        return new JcaX509CertificateConverter().setProvider("BCFIPS").getCertificate(v3CertBldr.build(signerBuilder.build(caPrivateKey)));
-    }
-
     public static String CifrarMensagem(String mensagem, Key key) {
         try {
             // Inicializar a montoeira de coisas que precisa
@@ -265,6 +215,7 @@ public class CriptoUtils {
             return Hex.encodeHexString(iv) + Hex.encodeHexString(cipherText);
 
         } catch (Exception e) {
+            // TODO Auto-generated catch block
             e.printStackTrace();
         }
 
@@ -304,12 +255,6 @@ public class CriptoUtils {
 
             String decifrado = toString(plainText, messageLength);
 
-			/*if (MessageDigest.isEqual(hMac.doFinal(), messageMac)) {
-				System.out.println("MAC Valido");
-			} else {
-				System.out.println("MAC Invalido");
-			}*/
-
             return decifrado;
 
         } catch (Exception e) {
@@ -318,20 +263,6 @@ public class CriptoUtils {
         }
 
         return null;
-    }
-
-    public static String EncodeCertificate(X509Certificate cert) throws Exception {
-        return Base64.getEncoder().encodeToString(cert.getEncoded());
-    }
-
-    public static X509Certificate DecodeCertificateFromPEM(String certB64) throws Exception {
-        byte encodedCert[] = Base64.getDecoder().decode(certB64);
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(encodedCert);
-
-        CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-        X509Certificate cert = (X509Certificate) certFactory.generateCertificate(inputStream);
-
-        return cert;
     }
 
     public static String SignString(PrivateKey key, byte[] data) throws Exception {

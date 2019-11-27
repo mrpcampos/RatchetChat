@@ -59,6 +59,10 @@ public class Pessoa {
         return privateKey;
     }
 
+    public void setIdentificador(String identificador) {
+        this.identificador = identificador;
+    }
+
     public PublicKey getPublicKey() {
         return certificate.getPublicKey();
     }
