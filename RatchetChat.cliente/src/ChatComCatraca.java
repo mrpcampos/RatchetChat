@@ -1,5 +1,3 @@
-import org.bouncycastle.util.encoders.Base64;
-
 import javax.crypto.KeyAgreement;
 import javax.crypto.spec.SecretKeySpec;
 import javax.swing.*;
@@ -8,16 +6,13 @@ import java.io.*;
 import java.net.Socket;
 import java.security.*;
 import java.security.cert.X509Certificate;
-import java.util.ArrayDeque;
-import java.util.Collection;
-import java.util.Iterator;
 import java.util.Queue;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ChatComCatraca {
     public static final String A = "A";
     public static final String B = "B";
+
     private final String AouB;
     private Pessoa eu;
 
@@ -30,11 +25,17 @@ public class ChatComCatraca {
     private String identOutro;
     private X509Certificate certOutro;
 
-    private Catraca catraca;
-    private boolean vezNaCatraca;
+    private Catraca catracaEnvio;
+    private Catraca catracaRecebimento;
 
-    Thread comunicador;
-    private Queue<String> mensagens;
+    Thread msgSorter;
+    Thread msgEnviador;
+    Thread msgReceptorConfirmador;
+
+    private Queue<String> msgParaEnviar;
+
+    private WaitIfEmpytQueue<MensagemCatraca> msgDeConfirmacaoRecebidas;
+    private WaitIfEmpytQueue<MensagemCatraca> msgDeTextoRecebidas;
 
 
     /**
@@ -45,123 +46,146 @@ public class ChatComCatraca {
      */
     public ChatComCatraca(Pessoa eu, Socket outraPessoa, String AouB) throws Exception {
         this.AouB = AouB;
-        this.mensagens = new ConcurrentLinkedQueue<>() {
-            @Override
-            public synchronized boolean add(String s) {
-                notify();
-                return super.add(s);
-            }
-
-            @Override
-            public synchronized String remove() {
-                if (isEmpty()) {
-                    try {
-                        wait();
-                    } catch (InterruptedException e1) {
-                        System.out.println("Não deu para usar o wait como esperado");
-                    }
-                }
-                return super.remove();
-            }
-        };
+        this.msgParaEnviar = new WaitIfEmpytQueue<>();
+        this.msgDeConfirmacaoRecebidas = new WaitIfEmpytQueue<>();
+        this.msgDeTextoRecebidas = new WaitIfEmpytQueue<>();
 
         this.ig = new InterfaceGrafica(eu.getIdentificador());
         this.proxy = Proxy.getInstance();
         this.eu = eu;
 
         CriptoUtils.SetProvider();
-        this.catraca = new Catraca(CriptoUtils.generateDHNumberPair());
+        this.catracaEnvio = new Catraca(CriptoUtils.generateDHNumberPair());
 
         enviar = new ObjectOutputStream(outraPessoa.getOutputStream());
         receber = new ObjectInputStream(outraPessoa.getInputStream());
 
+        //Produz primeira chave de sessão com DH
         try {
             if (this.AouB.equals(A)) {
                 caminhoA();
             } else if (this.AouB.equals(B)) {
                 caminhoB();
             } else {
-                throw new IllegalArgumentException("O valor de AouB deve ser A ou B.");
+                throw new InvalidAlgorithmParameterException("O valor de AouB deve ser A ou B.");
             }
-        } catch (Exception e) {
-            InterfaceGrafica.showDialog("Erro nos primeiros passos do DH.", "Error", JOptionPane.ERROR_MESSAGE);
-            throw e;
-        }
 
-        ig.abrirChat();
-        ig.addListeners(this::ouvidorCaixaDeTexto);
+            System.out.println("Diffie-Hellmans concluido");
 
-        try {
+            //Inicia a segunda catraca para permitir envio assincrono de mensagens
+            //TODO ver uma forma melhor de fazer isso, a primeira chave de sessão esta sendo usada duas vezes
+            catracaRecebimento = catracaEnvio.clone();
 
-            boolean parar = false;
-            comunicador = new Thread(() -> {
+            ig.abrirChat();
+            ig.addListeners(this::ouvidorCaixaDeTexto);
+
+
+            //Cria thread que recebe as mensagens e separa entre confirmação e texto
+            msgSorter = new Thread(() -> {
                 try {
-                    if (this.AouB.equals(B)) {
-                        enviarMsgCatraca();
+                    while (true) {
+                        MensagemCatraca mensagemCatraca = (MensagemCatraca) receber.readObject();
+                        if (mensagemCatraca.getTipo().equals(MensagemCatraca.Tipo.MENSAGEM)) {
+                            this.msgDeTextoRecebidas.add(mensagemCatraca);
+                        } else if (mensagemCatraca.getTipo().equals(MensagemCatraca.Tipo.CONFIRMAÇÃO)) {
+                            this.msgDeConfirmacaoRecebidas.add(mensagemCatraca);
+                        } else {
+                            System.out.println("Tipo de mensagem não reconhecido, impossível tratar mensagem");
+                            throw new InvalidAlgorithmParameterException("Tipo de mensagem não reconhecido, impossível tratar mensagem");
+                        }
                     }
-                    while (!parar) {
-                        receberMsgCatraca();
-                        enviarMsgCatraca();
-                    }
-                } catch (Exception e) {
+                } catch (IOException | ClassNotFoundException | InvalidAlgorithmParameterException e) {
+                    System.out.println("Erro separando as mensagens");
                     e.printStackTrace();
                 }
             });
-            comunicador.start();
+            msgSorter.start();
 
+            //Começa a comunicação com uso de duas catracas duplas
+            msgReceptorConfirmador = new Thread(() -> {
+                try {
+                    while (true) {
+                        MensagemCatraca mensagemCatraca = msgDeTextoRecebidas.remove();
+                        String msg = receberMsgCatraca(catracaRecebimento, mensagemCatraca);
+                        ig.receberMensagem(msg);
+                        enviarMsgCatraca(catracaRecebimento, MensagemCatraca.Tipo.CONFIRMAÇÃO, "Mensagem recebida com sucesso.");
+                    }
+                } catch (Exception e) {
+                    System.out.println("Erro recebendo e confirmando mensagens");
+                    e.printStackTrace();
+                }
+            });
+            msgReceptorConfirmador.start();
+
+            //Começa a comunicação com uso de duas catracas duplas
+            msgEnviador = new Thread(() -> {
+                try {
+                    while (true) {
+                        //Envia mensagem
+                        enviarMsgCatraca(catracaEnvio, MensagemCatraca.Tipo.MENSAGEM, msgParaEnviar.remove());
+                        //Espera confirmação de recebimento
+                        MensagemCatraca mensagemCatraca = msgDeConfirmacaoRecebidas.remove();
+                        //Atualiza valor das chaves da catraca
+                        receberMsgCatraca(catracaEnvio, mensagemCatraca);
+                    }
+                } catch (Exception e) {
+                    System.out.println("Erro enviando e recebendo confirmações de mensagens");
+                    e.printStackTrace();
+                }
+            });
+            msgEnviador.start();
+
+            permitirEnviarMensagens(true);
+
+            msgSorter.join();
 
         } catch (
                 Exception e) {
             e.printStackTrace();
-            InterfaceGrafica.showDialog("Erro durante o tratamento das mensagens do chat com as catracas", "Erro", JOptionPane.ERROR_MESSAGE);
+            InterfaceGrafica.showDialog("Erro durante o tratamento das msgParaEnviar do msgParaEnviar com as catracas", "Erro", JOptionPane.ERROR_MESSAGE);
         }
-
     }
 
     private void caminhoA() throws Exception {
         //A -> B: g^a, A
-        enviar.writeObject(catraca.getMyPubKeyDH());  //g^a
+        enviar.writeObject(catracaEnvio.getMyPubKeyDH());  //g^a
         enviar.writeObject(eu.getIdentificador());  //A
 
         //B -> A: g^b, CERTb, Eg^ab{ SIGb{g^a, g^b, A}}
-        catraca.setPubKeyOutro((PublicKey) receber.readObject());                            //g^b
+        catracaEnvio.setPubKeyOutro((PublicKey) receber.readObject());                            //g^b
         certOutro = (X509Certificate) receber.readObject();                                  //CERTb
-        catraca.setSessioanKey(defSessionKey(catraca.getPubKeyOutro(), catraca.getMyPrivKeyDH()));//g^ab
+        catracaEnvio.setSessioanKey(defSessionKey(catracaEnvio.getPubKeyOutro(), catracaEnvio.getMyPrivKeyDH()));//g^ab
         identOutro = certOutro.getIssuerX500Principal().getName().split("=")[1];
-        verificarAutenticidade((String) receber.readObject(), catraca.getMyPubKeyDH(), catraca.getPubKeyOutro());
+        verificarAutenticidade((String) receber.readObject(), catracaEnvio.getMyPubKeyDH(), catracaEnvio.getPubKeyOutro(), catracaEnvio.getSessionKey());
 
         // A -> B: CERTa, Eg^ab {SIGa{g^a, g^b, B}}
         enviar.writeObject(eu.getCertificate()); //CERTa
-        enviar.writeObject(comprovarAutenticidade(catraca.getMyPubKeyDH(), catraca.getPubKeyOutro()));
-        InterfaceGrafica.showDialog("Deu tudo certo no caminho A!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+        enviar.writeObject(comprovarAutenticidade(catracaEnvio.getMyPubKeyDH(), catracaEnvio.getPubKeyOutro(), catracaEnvio.getSessionKey()));
     }
 
     private void caminhoB() throws Exception {
         //A -> B: g^a, A
-        catraca.setPubKeyOutro((PublicKey) receber.readObject());   //g^a
+        catracaEnvio.setPubKeyOutro((PublicKey) receber.readObject());   //g^a
         this.identOutro = (String) receber.readObject();            //A
-        catraca.setSessioanKey(defSessionKey(catraca.getPubKeyOutro(), catraca.getMyPrivKeyDH()));//g^ab
+        catracaEnvio.setSessioanKey(defSessionKey(catracaEnvio.getPubKeyOutro(), catracaEnvio.getMyPrivKeyDH()));//g^ab
 
         //B -> A: g^b, CERTb, Eg^ab{ SIGb{g^a, g^b, A}}
-        enviar.writeObject(catraca.getMyPubKeyDH());    //g^b
+        enviar.writeObject(catracaEnvio.getMyPubKeyDH());    //g^b
         enviar.writeObject(eu.getCertificate());        //CERTb
-        enviar.writeObject(comprovarAutenticidade(catraca.getPubKeyOutro(), catraca.getMyPubKeyDH()));
+        enviar.writeObject(comprovarAutenticidade(catracaEnvio.getPubKeyOutro(), catracaEnvio.getMyPubKeyDH(), catracaEnvio.getSessionKey()));
 
 
         //A -> B: CERTa, Eg^ab {SIGa{g^a, g^b, B}}
         certOutro = (X509Certificate) receber.readObject();             //CERTa
         verificarAutenticidade((String) receber.readObject(),
-                catraca.getPubKeyOutro(),
-                catraca.getMyPubKeyDH());//Eg^ab{ SIGa{g^a, g^b, B}}
-
-        InterfaceGrafica.showDialog("Deu tudo certo no caminho B!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-
+                catracaEnvio.getPubKeyOutro(),
+                catracaEnvio.getMyPubKeyDH(), catracaEnvio.getSessionKey());//Eg^ab{ SIGa{g^a, g^b, B}}
     }
 
-    private void enviarMsgCatraca() throws Exception {
+    private void enviarMsgCatraca(Catraca catraca, MensagemCatraca.Tipo tipo, String msg) throws Exception {
         permitirEnviarMensagens(true);
         //B -> A: Eg^ab{ g^b', msg, Eg^ab'{ SIGb{g^a, g^b', A}}}
-        MensagemCatraca msgCatraca = new MensagemCatraca();
+        MensagemCatraca msgCatraca = new MensagemCatraca(tipo);
 
         //Atualizando valores e guardando os necessários
         Key sessionKeyAtual = catraca.getSessionKey();                                                          //g^ab
@@ -172,17 +196,21 @@ public class ChatComCatraca {
         msgCatraca.setPublicKey(catraca.getMyPubKeyDH());               //g^ab'
 
         if (this.AouB.equals(A))
-            msgCatraca.setAssCriptografada(comprovarAutenticidade(catraca.getMyPubKeyDH(), catraca.getPubKeyOutro()));//Eg^ab'{ SIGb{g^a, g^b', A}}
+            msgCatraca.setAss(comprovarAutenticidade(catraca.getMyPubKeyDH(), catraca.getPubKeyOutro(), catraca.getSessionKey()));//Eg^ab'{ SIGb{g^a, g^b', A}}
         else
-            msgCatraca.setAssCriptografada(comprovarAutenticidade(catraca.getPubKeyOutro(), catraca.getMyPubKeyDH()));//Eg^ab'{ SIGb{g^a, g^b', A}}
+            msgCatraca.setAss(comprovarAutenticidade(catraca.getPubKeyOutro(), catraca.getMyPubKeyDH(), catraca.getSessionKey()));//Eg^ab'{ SIGb{g^a, g^b', A}}
 
-        msgCatraca.setMsg(mensagens.remove());
-        enviar.writeObject(CriptoUtils.CifrarMensagem(serialize(msgCatraca), sessionKeyAtual));
+        msgCatraca.setMsg(msg);
+
+        msgCatraca.encript(sessionKeyAtual);
+
+        enviar.writeObject(msgCatraca);
     }
 
-    private void receberMsgCatraca() throws Exception {
+    private String receberMsgCatraca(Catraca catraca, MensagemCatraca msgRecebida) throws Exception {
         //B -> A: Eg^ab{ g^b', msg, Eg^ab'{ SIGb{g^a, g^b', A}}}
-        MensagemCatraca msgRecebida = deserializa(CriptoUtils.DecifrarMensagem((String) receber.readObject(), catraca.getSessionKey()));
+
+        msgRecebida.decript(catraca.getSessionKey());
 
         //Atualiza valores de chave publica e de sessão
         catraca.setPubKeyOutro(msgRecebida.getPublicKey());
@@ -190,16 +218,18 @@ public class ChatComCatraca {
 
         //Verifica Autenticidade
         if (this.AouB.equals(A)) {
-            verificarAutenticidade(msgRecebida.getAssinaturaDasChavesCriptografada(), catraca.getMyPubKeyDH(), catraca.getPubKeyOutro());
+            verificarAutenticidade(msgRecebida.getAss(), catraca.getMyPubKeyDH(), catraca.getPubKeyOutro(), catraca.getSessionKey());
         } else {
-            verificarAutenticidade(msgRecebida.getAssinaturaDasChavesCriptografada(), catraca.getPubKeyOutro(), catraca.getMyPubKeyDH());
+            verificarAutenticidade(msgRecebida.getAss(), catraca.getPubKeyOutro(), catraca.getMyPubKeyDH(), catraca.getSessionKey());
         }
-        //Manda a mensagem para o chat
-        ig.receberMensagem(msgRecebida.getMsg());
+
+        //Devolve a mensagem para ser utilizada pelo programa
+        return msgRecebida.getMsg();
     }
 
     //Ler Eg^ab{ SIGb{g^a, g^b, A}}
-    private void verificarAutenticidade(String textoCriptografado, PublicKey pubKeyA, PublicKey pubKeyB) throws Exception {
+    private void verificarAutenticidade(String textoCriptografado, PublicKey pubKeyA, PublicKey pubKeyB, Key sessionKey) throws
+            Exception {
         //Verifica se o certificado existe no servidor
         RespostaConsultaCertificado res = (RespostaConsultaCertificado) proxy.fazerRequisicao(eu.getIpServidor(), eu.getPortaServidor(), new RequisicaoConsultaCertificado(identOutro));
         if (res.resposta.equals(Mensagens.NEGADO) || !res.getCertificado().equals(certOutro)) {
@@ -210,14 +240,14 @@ public class ChatComCatraca {
 
         //Verifica se o certificado realmente assinou os valores
         byte[] concatBytes = concatByteArrays(pubKeyA.getEncoded(), pubKeyB.getEncoded(), eu.getIdentificador().getBytes());
-        if (!CriptoUtils.CheckSign(certOutro.getPublicKey(), CriptoUtils.DecifrarMensagem(textoCriptografado, catraca.getSessionKey()), concatBytes)) {
+        if (!CriptoUtils.CheckSign(certOutro.getPublicKey(), CriptoUtils.DecifrarMensagem(textoCriptografado, sessionKey), concatBytes)) {
             throw new SecurityException("Certificado RSA inválido, possível ataque!");
         }
     }
 
     //Gerar Eg^ab {SIGa{g^a, g^b, B}}
-    private String comprovarAutenticidade(PublicKey pubKeyA, PublicKey pubKeyB) throws Exception {
-        return CriptoUtils.CifrarMensagem(assinarChavesEIdentificador(pubKeyA, pubKeyB), catraca.getSessionKey());
+    private String comprovarAutenticidade(PublicKey pubKeyA, PublicKey pubKeyB, Key sessionKey) throws Exception {
+        return CriptoUtils.CifrarMensagem(assinarChavesEIdentificador(pubKeyA, pubKeyB), sessionKey);
     }
 
     private String assinarChavesEIdentificador(PublicKey pubKeyA, PublicKey pubKeyB) throws Exception {
@@ -232,7 +262,8 @@ public class ChatComCatraca {
         return outputStream.toByteArray();
     }
 
-    private Key defSessionKey(PublicKey keyPubDHOutro, PrivateKey myPrivKeyDH) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidKeyException {
+    private Key defSessionKey(PublicKey keyPubDHOutro, PrivateKey myPrivKeyDH) throws
+            NoSuchAlgorithmException, NoSuchProviderException, InvalidKeyException {
         KeyAgreement keyAgree = KeyAgreement.getInstance("DH", "BCFIPS");
 
         keyAgree.init(myPrivKeyDH);
@@ -241,38 +272,41 @@ public class ChatComCatraca {
         return new SecretKeySpec(hash.digest(keyAgree.generateSecret()), "AES");
     }
 
-    private String serialize(MensagemCatraca msgCatraca) throws IOException {
-        ByteArrayOutputStream bo = new ByteArrayOutputStream();
-        ObjectOutputStream so = new ObjectOutputStream(bo);
-        so.writeObject(msgCatraca);
-        so.flush();
-        return new String(Base64.encode(bo.toByteArray()));
-    }
-
-    private MensagemCatraca deserializa(String msgCatracaSerializado) throws IOException, ClassNotFoundException {
-        byte b[] = Base64.decode(msgCatracaSerializado.getBytes());
-        ByteArrayInputStream bi = new ByteArrayInputStream(b);
-        ObjectInputStream si = new ObjectInputStream(bi);
-        return (MensagemCatraca) si.readObject();
-    }
-
     public void ouvidorCaixaDeTexto(ActionEvent event) {
         String textoCaixaEnvio = ig.getTextoCaixaEnvio();
-        if (textoCaixaEnvio.trim().length() > 1 && vezNaCatraca) {
+        if (textoCaixaEnvio.trim().length() > 1) {
             if (textoCaixaEnvio.equals(".clear")) {
                 ig.limparChat();
             } else {
                 String msg = ig.popMensagemParaEnviar();
                 permitirEnviarMensagens(false);
-                mensagens.add(msg);
+                msgParaEnviar.add(msg);
                 ig.receberMensagem(msg);
             }
         }
     }
 
-
     private void permitirEnviarMensagens(boolean bool) {
-        vezNaCatraca = bool;
         ig.permitirEnvioMensagens(bool);
+    }
+
+    class WaitIfEmpytQueue<T> extends ConcurrentLinkedQueue<T> {
+        @Override
+        public synchronized boolean add(T s) {
+            notifyAll();
+            return super.add(s);
+        }
+
+        @Override
+        public synchronized T remove() {
+            if (isEmpty()) {
+                try {
+                    wait();
+                } catch (InterruptedException e1) {
+                    System.out.println("Não deu para usar o wait como esperado");
+                }
+            }
+            return super.remove();
+        }
     }
 }

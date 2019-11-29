@@ -138,6 +138,7 @@ public class InterfaceGrafica {
         String msg = pct.substring(0, divider);
         String username = pct.substring(pct.lastIndexOf(":") + 1);
         this.adicionarMensagem(msg, username);
+        messageBox.requestFocusInWindow();
     }
 
     public void adicionarMensagem(String msg, String remetente) {

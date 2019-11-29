@@ -42,4 +42,11 @@ public class Catraca {
     public void setParDeChaves(KeyPair parDeChaves) {
         this.parDeChaves = parDeChaves;
     }
+
+    public Catraca clone(){
+        Catraca novaCatraca = new Catraca(new KeyPair(this.getMyPubKeyDH(), this.getMyPrivKeyDH()));
+        novaCatraca.setSessioanKey(this.getSessionKey());
+        novaCatraca.setPubKeyOutro(this.getPubKeyOutro());
+        return novaCatraca;
+    }
 }

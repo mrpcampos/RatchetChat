@@ -1,7 +1,4 @@
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.math.BigInteger;
 import java.security.*;
 import java.security.cert.X509Certificate;
@@ -255,6 +252,21 @@ public class CriptoUtils {
         String decifrado = toString(plainText, messageLength);
 
         return decifrado;
+    }
+
+    public static String serialize(Object msgCatraca) throws IOException {
+        ByteArrayOutputStream bo = new ByteArrayOutputStream();
+        ObjectOutputStream so = new ObjectOutputStream(bo);
+        so.writeObject(msgCatraca);
+        so.flush();
+        return new String(org.bouncycastle.util.encoders.Base64.encode(bo.toByteArray()));
+    }
+
+    public static Object deserializa(String msgCatracaSerializado) throws IOException, ClassNotFoundException {
+        byte b[] = org.bouncycastle.util.encoders.Base64.decode(msgCatracaSerializado.getBytes());
+        ByteArrayInputStream bi = new ByteArrayInputStream(b);
+        ObjectInputStream si = new ObjectInputStream(bi);
+        return si.readObject();
     }
 
     public static String SignString(PrivateKey key, byte[] data) throws Exception {
